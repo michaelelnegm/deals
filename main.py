@@ -1,148 +1,149 @@
 # -*- coding: utf-8 -*-
-"""صائد العروض - ملف واحد بسيط"""
+"""
+فحص سريع: هل الكوكيز شغالة؟
+لو الكوكيز منتهية، السكريبت هيقولك ونرجع نجيب واحدة جديدة.
+"""
 
-import time
-
-try:
-    from curl_cffi import requests
-    print("✅ curl_cffi متاح")
-except ImportError:
-    print("❌ ثبّت curl_cffi أول: pip install curl_cffi")
-    exit()
+import sys
+import requests
+import json
 
 # ============================================================
-# ✏️ الكوكيز - حدّثها من Chrome
+# ✏️ حدّث الكوكيز هنا من Chrome
 # ============================================================
-CF_CLEARANCE = "CkcRnZrNvWYr5U_ibmZ5tAh14e9LjCsamT-i5ZwO0dNyHW-1sQbtMxo3tjI2ucm_yuj5je7AXtxvR1--Jp6jrj6DXxx-0sYmOrjrRRfzd2v6YoQqlCCAdy77DO22uY5m-DNkB7DbRQw14Jl2Y7Cagqi998em94v78yMTNALpfo0W38ut2Mp4zyJjWiEVswENRS0i2GFsgy3LNRC5WilSjZB90A5JBR2zIj6sdZX2b6SlYqwTLXykHUfQm9IV0Sq3u-_1cq2aBFo1uzRGyXjrQIxTEs5JRLUv6rRaUF0tJehYWA"
-GID = "eyJnIjoiMjE3ZjIzZDc5N2Y2Mjc2NSJ9.au4ilQ.LygSlT27ujoQpI-KWHKWzrj9K28"
-
-# ============================================================
-# الإعدادات
-# ============================================================
-BASE_URL = "https://deals.3rrood.com"
-MIN_DROP = 5      # أقل نسبة خصم مقبولة
-TOP_N = 10        # كم عرض تعرض
-
-COOKIES = {'cf_clearance': CF_CLEARANCE, 'gid': GID}
-
-HEADERS = {
-    'x-app': '1',
-    'accept': '*/*',
-    'accept-language': 'ar-EG,ar;q=0.9,en;q=0.8',
-    'referer': f'{BASE_URL}/live',
-    'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
-                  '(KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+COOKIES = {
+    'cf_clearance': 'CkcRnZrNvWYr5U_ibmZ5tAh14e9LjCsamT-i5ZwO0dNyHW-1sQbtMxo3tjI2ucm_yuj5je7AXtxvR1--Jp6jrj6DXxx-0sYmOrjrRRfzd2v6YoQqlCCAdy77DO22uY5m-DNkB7DbRQw14Jl2Y7Cagqi998em94v78yMTNALpfo0W38ut2Mp4zyJjWiEVswENRS0i2GFsgy3LNRC5WilSjZB90A5JBR2zIj6sdZX2b6SlYqwTLXykHUfQm9IV0Sq3u-_1cq2aBFo1uzRGyXjrQIxTEs5JRLUv6rRaUF0tJehYWA',
+    'gid': 'eyJnIjoiMjE3ZjIzZDc5N2Y2Mjc2NSJ9.au4ilQ.LygSlT27ujoQpI-KWHKWzrj9K28',
 }
 
+HEADERS = {
+    'authority': 'deals.3rrood.com',
+    'accept': '*/*',
+    'accept-language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+    'cache-control': 'no-cache',
+    'pragma': 'no-cache',
+    'referer': 'https://deals.3rrood.com/store/amazon',
+    'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+    'sec-ch-ua-mobile': '?1',
+    'sec-ch-ua-platform': '"Android"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+    'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+    'x-app': '1',
+}
 
-# ============================================================
-# الجلب
-# ============================================================
-def fetch(url, params=None):
+BASE_URL = "https://deals.3rrood.com"
+
+
+def check_response(response, label=""):
+    """يفحص الرد ويقولنا هل هو JSON (نجاح) أو Cloudflare (فشل)."""
+    if response.status_code == 403:
+        print(f"\n❌ {label}: 403 Forbidden")
+        return False
+
+    # Cloudflare challenge?
+    if 'Just a moment' in response.text[:500] or 'cf_chl_opt' in response.text:
+        print(f"\n🛡️  {label}: Cloudflare Challenge!")
+        print("   السبب: الكوكيز منتهية أو IP مختلف.")
+        return False
+
+    # JSON?
+    try:
+        data = response.json()
+        print(f"\n✅ {label}: نجح! رجع JSON.")
+        return data
+    except (json.JSONDecodeError, ValueError):
+        print(f"\n⚠️  {label}: HTTP {response.status_code} لكن مش JSON.")
+        print(f"   أول 100 حرف: {response.text[:100]}")
+        return False
+
+
+def test_live_endpoint():
+    """اختبار /api/live."""
+    print("\n📡 بختبر /api/live ...")
     try:
         r = requests.get(
-            url,
+            f'{BASE_URL}/api/live',
             headers=HEADERS,
             cookies=COOKIES,
-            params=params,
-            impersonate="chrome120",
             timeout=30,
         )
-        print(f"   {url.split('/')[-1]} → {r.status_code}")
-        if r.status_code == 200:
-            return r.json()
-        if r.status_code == 403:
-            print("   ❌ 403 - الكوكيز انتهت. جددها من Chrome.")
-        return None
+        print(f"   Status: {r.status_code}")
+        return check_response(r, "/api/live")
     except Exception as e:
-        print(f"   ❌ {e}")
-        return None
+        print(f"   ❌ استثناء: {e}")
+        return False
 
 
-# ============================================================
-# التقييم
-# ============================================================
-def score(item):
-    s = item.get('drop', 0) * 3
-    s += item.get('off', 0) * 2
-    if item.get('lowest'): s += 40
-    if item.get('low90'):  s += 20
-    if item.get('fake'):   s -= 50
-    if item.get('out'):    s -= 200
-    return round(s, 1)
+def test_store_endpoint(slug="amazon"):
+    """اختبار /api/stores/{slug}/products."""
+    print(f"\n📡 بختبر /api/stores/{slug}/products ...")
+    try:
+        r = requests.get(
+            f'{BASE_URL}/api/stores/{slug}/products',
+            headers={**HEADERS, 'referer': f'{BASE_URL}/store/{slug}'},
+            cookies=COOKIES,
+            params={'page': '1', 'sort': 'recent'},
+            timeout=30,
+        )
+        print(f"   Status: {r.status_code}")
+        return check_response(r, f"/api/stores/{slug}/products")
+    except Exception as e:
+        print(f"   ❌ استثناء: {e}")
+        return False
 
 
-def real_price(item):
-    if item.get('fake'):
-        return (item.get('price', 0) + item.get('was', 0)) / 2
-    return item.get('was', item.get('price', 0))
-
-
-# ============================================================
-# العرض
-# ============================================================
-def show(items, title):
-    print("\n" + "=" * 65)
-    print(title)
-    print("=" * 65)
-    for i, it in enumerate(items, 1):
-        rp = real_price(it)
-        save = rp - it.get('price', 0)
-        pct = (save / rp * 100) if rp > 0 else 0
-
-        badges = []
-        if it.get('lowest'): badges.append("🏆 أقل سعر تاريخي")
-        if it.get('low90'):  badges.append("📉 90يوم")
-        if it.get('off', 0) > 0: badges.append(f"🎟️{it['off']}%")
-
-        print(f"\n{i}. {(it.get('name') or '?')[:60]}")
-        print(f"   🏪 {it.get('store_name', '?')}  |  🔖 {it.get('code', '?')}")
-        print(f"   💰 {it.get('price', 0):,.0f} {it.get('currency','EGP')}  "
-              f"(كان {it.get('was', 0):,.0f})")
-        print(f"   💸 توفير {save:,.0f} ({pct:.0f}%)  |  drop {it.get('drop',0)}%")
-        if badges:
-            print(f"   {' | '.join(badges)}")
-        print(f"   🔗 {BASE_URL}/{it.get('code','')}")
-
-
-# ============================================================
-# MAIN
-# ============================================================
 def main():
-    print("\n🚀 صائد العروض - بداية\n")
+    print("=" * 60)
+    print("🔍 فحص صلاحية الكوكيز")
+    print("=" * 60)
 
-    # 1) جلب العروض الحية
-    print("📡 بجلب /api/live ...")
-    data = fetch(f"{BASE_URL}/api/live")
-    if not data:
-        print("\n❌ فشل الجلب. تحقق من الكوكيز.")
-        return
+    # اختبار 1: /api/live
+    live_data = test_live_endpoint()
 
-    items = data.get('items', [])
-    stores = data.get('stores', [])
-    print(f"\n✅ استلمت {len(items)} عرض من {len(stores)} متجر")
+    # اختبار 2: /api/stores/amazon/products
+    store_data = test_store_endpoint("amazon")
 
-    # 2) إحصائيات المتاجر
-    if stores:
-        print("\n🏪 عدد العروض لكل متجر:")
-        for s in sorted(stores, key=lambda x: x['n'], reverse=True)[:10]:
-            print(f"   • {s['name']:<20} {s['n']:>5}")
+    # -------- النتيجة --------
+    print("\n" + "=" * 60)
+    print("📊 النتيجة")
+    print("=" * 60)
 
-    # 3) فلترة
-    hot = [
-        i for i in items
-        if not i.get('out')
-        and not i.get('fake')
-        and i.get('drop', 0) >= MIN_DROP
-    ]
-    hot.sort(key=score, reverse=True)
-    print(f"\n🔥 لقيت {len(hot)} عرض جامد (drop ≥ {MIN_DROP}%، بدون fake/out)")
+    if not live_data and not store_data:
+        print("""
+❌ الكوكيز منتهية أو مش شغالة.
 
-    # 4) عرض أفضل العروض
-    if hot:
-        show(hot[:TOP_N], f"أفضل {min(len(hot), TOP_N)} عروض")
-    else:
-        print("مفيش عروض تستاهل النهاردة 😅")
+الحل:
+1. افتح Chrome في الموبايل
+2. روح https://deals.3rrood.com/live
+3. استنى الصفحة تحمل كاملة (30 ثانية)
+4. اضغط F12 (أو استخدم Kiwi Browser)
+5. Application → Cookies → deals.3rrood.com
+6. انسخ cf_clearance الجديدة والصقها في الكود
+7. شغّل السكريبت فورًا (في نفس دقيقة النسخ)
+""")
+        sys.exit(1)
+
+    # -------- عرض النتائج --------
+    if live_data:
+        items = live_data.get('items', [])
+        print(f"\n🔥 /api/live: {len(items)} عرض")
+        for it in items[:3]:
+            print(f"   • {it.get('name', '?')[:50]}")
+            print(f"     💰 {it.get('price', 0):,.0f} {it.get('currency', 'EGP')}"
+                  f" (كان {it.get('was', 0):,.0f})")
+
+    if store_data:
+        items = store_data if isinstance(store_data, list) else (
+            store_data.get('items') or store_data.get('products') or []
+        )
+        print(f"\n🔥 amazon products: {len(items)} منتج")
+        for it in items[:3]:
+            print(f"   • {it.get('name', '?')[:50]}")
+            print(f"     💰 {it.get('price', 0):,.0f} {it.get('currency', 'EGP')}")
+
+    print("\n✅ الكوكيز شغالة!")
 
 
 if __name__ == "__main__":
